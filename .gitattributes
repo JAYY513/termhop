@@ -1,0 +1,12 @@
+# Keep every text file as LF, in the index and in the working tree, on every
+# platform. Without this the checkout depends on each developer's
+# core.autocrlf, so the same commit looks different per machine.
+* text=auto eol=lf
+
+# Generated at runtime by the CLI shim, never committed, but if one ever is,
+# cmd.exe parses it with the OEM code page and needs CRLF.
+*.cmd text eol=crlf
+
+# Build and packaging input.
+*.png binary
+*.ico binary

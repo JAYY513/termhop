@@ -1,0 +1,52 @@
+{
+  "name": "termhop",
+  "version": "0.1.0",
+  "description": "A keyboard-first launcher for hopping into terminals in the right directory.",
+  "main": "./out/main/index.js",
+  "author": "TermHop contributors",
+  "license": "MIT",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JAYY513/termhop.git"
+  },
+  "homepage": "https://github.com/JAYY513/termhop#readme",
+  "bugs": {
+    "url": "https://github.com/JAYY513/termhop/issues"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "icons": "node scripts/gen-icon.mjs",
+    "docs:shot": "electron scripts/screenshot-docs.cjs",
+    "verify": "node scripts/verify-all.mjs",
+    "verify:spawn": "node scripts/verify-spawn.mjs",
+    "verify:window": "node scripts/verify-window.mjs",
+    "verify:cli": "node scripts/verify-cli.mjs",
+    "verify:autostart": "node scripts/verify-autostart.mjs",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.6"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "electron@44.4.5": true
+  }
+}

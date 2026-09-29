@@ -1,0 +1,717 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  /*
+   * Opaque on purpose. A translucent panel looked better in theory, but
+   * backdrop-filter does not apply to a transparent Electron window on
+   * Windows, so whatever was behind the launcher showed through sharp and
+   * legible instead of blurred.
+   */
+  --bg: #14151a;
+  --bg-solid: #14151a;
+  --bg-raised: #1c1e25;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #e8eaf0;
+  --muted: #8b90a0;
+  --accent: #6fb3ff;
+  --danger: #ff6b6b;
+  --radius: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  /* The launcher window is transparent so it can have rounded corners. */
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.boot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: var(--bg-solid);
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------- launcher */
+
+.launcher {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+/*
+ * The window is resized to fit its content, so these two must not stretch:
+ * a stretched list is what left a 300px void under a single entry.
+ */
+.launcher-inner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.search-shell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.prompt {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  color: var(--accent);
+  font-weight: 600;
+  flex: none;
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 18px;
+  font-family: inherit;
+  user-select: text;
+}
+
+.search::placeholder {
+  color: var(--muted);
+}
+
+/* The only drag handle, kept clear of the input so typing still works. */
+.grip {
+  flex: none;
+  width: 18px;
+  height: 26px;
+  margin: -4px -4px -4px 0;
+  border-radius: 4px;
+  -webkit-app-region: drag;
+  background-image: radial-gradient(circle, var(--border-strong) 1px, transparent 1px);
+  background-size: 5px 5px;
+  background-position: center;
+  opacity: 0.75;
+}
+
+.grip:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.no-result p {
+  margin: 0 0 8px;
+}
+
+.no-result .dim {
+  color: var(--muted);
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.no-result button {
+  margin-top: 6px;
+}
+
+.path-row .row-title {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  color: var(--accent);
+}
+
+.path-row .badge {
+  background: rgba(111, 179, 255, 0.16);
+  border-color: rgba(111, 179, 255, 0.35);
+  color: var(--accent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.list {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 0 8px;
+}
+
+.section + .section {
+  margin-top: 2px;
+}
+
+.section-title {
+  padding: 10px 18px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px;
+  padding: 8px 10px;
+  border-radius: 9px;
+}
+
+.row.selected {
+  background: rgba(111, 179, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(111, 179, 255, 0.3);
+}
+
+.row-index {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.row.selected .row-index {
+  color: var(--accent);
+}
+
+.row-main {
+  min-width: 0;
+}
+
+.row-title {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-path {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+mark {
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.row-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.badge {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 58px;
+  text-align: right;
+}
+
+.notice {
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  flex: none;
+}
+
+.notice.error {
+  background: rgba(255, 107, 107, 0.14);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: #ffb4b4;
+}
+
+.notice.info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(111, 179, 255, 0.12);
+  border: 1px solid rgba(111, 179, 255, 0.28);
+  color: #bcd9ff;
+}
+
+button.link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  font-size: 12px;
+}
+
+button.link:hover {
+  background: none;
+  color: #9ccbff;
+}
+
+.no-result,
+.empty-body {
+  padding: 28px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  flex: none;
+  /* Keeps the footer on the bottom edge if the window is briefly larger than
+     its content during a resize. */
+  margin-top: auto;
+  /* One line, always. The hint row used to wrap into two and look broken. */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.footer > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.footer .grow {
+  flex: 1;
+}
+
+.footer .dim {
+  opacity: 0.75;
+}
+
+kbd {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------- settings */
+
+.settings {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 28px 40px;
+  background: var(--bg-solid);
+  user-select: text;
+}
+
+.settings header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 22px 0 14px;
+  background: var(--bg-solid);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+
+.settings h1 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.settings h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.version {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings section {
+  margin-bottom: 30px;
+  padding: 18px 20px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field > label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hotkey-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hotkey-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hint.error {
+  color: #ffb4b4;
+}
+
+.hint.inline {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input[type='text'],
+input[type='number'],
+input:not([type]),
+select {
+  width: 100%;
+  padding: 7px 10px;
+  background: #12131a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent);
+}
+
+/* The launcher search is a text field, not a form control: a focus ring makes
+   it look like something you have to click into before typing. */
+.search:focus,
+.search:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+input.number {
+  width: 76px;
+  margin-left: auto;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.check input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.label-text {
+  margin-right: auto;
+}
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1117;
+  font-weight: 600;
+}
+
+button.primary:hover {
+  background: #8cc4ff;
+}
+
+button.ghost {
+  background: transparent;
+}
+
+button.icon {
+  padding: 4px 9px;
+  line-height: 1;
+}
+
+button.icon.danger:hover {
+  background: rgba(255, 107, 107, 0.18);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.hotkey {
+  min-width: 190px;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+}
+
+.hotkey.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.list-editor {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.list-editor li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #12131a;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.list-editor.entries li {
+  flex-wrap: wrap;
+}
+
+.entry-info {
+  flex: 1;
+  min-width: 180px;
+}
+
+.entry-title {
+  font-size: 13px;
+}
+
+.entry-path {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-editor select {
+  width: auto;
+  min-width: 96px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.list-editor .count,
+.tag {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  flex: none;
+}
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.add-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-row .hint.inline {
+  flex: 1;
+}
+
+.draft {
+  border-color: rgba(111, 179, 255, 0.35);
+}
+
+.banner {
+  border-color: rgba(255, 196, 139, 0.35) !important;
+  background: rgba(255, 196, 139, 0.08) !important;
+  color: #ffd0a0;
+}
+
+.banner p {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.banner p:last-child {
+  margin-bottom: 0;
+}
+
+.check input[type='radio'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.diag {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diag li {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: #12131a;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.diag .ok {
+  color: #6ee7a8;
+}
+
+.diag .missing {
+  color: #ffc48b;
+}
+
+code {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+pre.code {
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0e0f14;
+  color: var(--muted);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  user-select: text;
+}
