@@ -24,7 +24,9 @@ npm run icons
 | `npm run typecheck` | 主进程和渲染层两套 tsconfig 分别检查 |
 | `npm run build` | 产出到 `out/` |
 | `npm run dist` | 打包出 `release/` 下的 exe 和 zip |
-| `npm run verify` | 跑两套验证（见下） |
+| `npm run verify` | 跑四套验证（见下） |
+| `npm run icons` | 重新生成应用与托盘图标 |
+| `npm run docs:shot` | 重新生成 README 里的面板截图 |
 
 `verify:cli` 需要先 `npm run dist`，因为它要驱动真实打包出来的 exe。
 
@@ -62,15 +64,19 @@ src/
     components/       Launcher / Settings / EntryRow
 scripts/
   gen-icon.mjs        纯 zlib 手写 PNG，不依赖任何图形库
+  verify-all.mjs      聚合执行器，负责套件之间的前提清理
   verify-spawn.mjs    验证 shell 启动
   verify-window.mjs   验证窗口行为
   verify-cli.mjs      验证命令行
   verify-autostart.mjs 验证开机自启
+  screenshot-docs.cjs 生成 README 用的面板截图，用隔离 profile 和假数据
+  testkit.mjs         套件共用的进程与注册表前提
+  stubs/              给单元测试用的假 electron 模块
 ```
 
-## 两套验证为什么存在
+## 四套验证为什么存在
 
-这两个脚本各自负责**代码里最容易出错、又最难靠肉眼检查**的部分。改了相关代码请一并跑。
+这些脚本各自负责**代码里最容易出错、又最难靠肉眼检查**的部分。改了相关代码请一并跑。
 
 ```bash
 npm run verify
@@ -95,6 +101,11 @@ shell 启动的引号问题在开发时几乎看不出来——路径错了窗�
   不是靠时间窗口）
 - **固定位置会被夹回工作区**，拔掉显示器也不会飞出屏幕
 - **设置有焦点时启动器不因失焦消失**
+- **窗口必须是 `resizable: true`**——Electron 在 Windows 上遇到 `resizable: false`
+  会**静默忽略** `setSize()`，高度自适应会整个失效，而失败没有任何报错
+- **宽度用 `setMinimumSize` / `setMaximumSize` 钉死**，不让 `resizable: true`
+  顺带引入意外拉伸
+- **cursor 和 center 两种模式都不带点**，只有 fixed 保留拖动出来的坐标
 
 ### verify-cli.mjs
 
