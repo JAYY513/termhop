@@ -28,8 +28,8 @@ TermHop 是常驻托盘的 Windows 小工具。它把你常用的项目目录记
 
 ## 快速开始
 
-1. 在仓库的 **Releases** 页面下载 `TermHop-x.x.x-x64.exe`（安装包）或
-   `TermHop-x.x.x-x64.zip`（免安装版，解压即用）
+1. 在 [Releases 页面](https://github.com/JAYY513/termhop/releases/latest) 下载
+   `TermHop-x.x.x-x64.exe`（安装包）或 `TermHop-x.x.x-x64.zip`（免安装版，解压即用）
 2. 启动后，右键托盘图标 → **设置**
 3. 添加你的第一个目录（见下一节）
 4. 按下 `Ctrl + Space`（默认快捷键，可改）
