@@ -1,5 +1,14 @@
 export type ShellId = 'pwsh' | 'powershell' | 'cmd' | 'wt'
 
+/**
+ * Which shell a bare path opens in, and what a newly added entry defaults to.
+ *
+ * Lives here because the launcher needs it too: it shows the chosen shell as
+ * the badge on the "save this" row, and that badge has to be the same shell the
+ * entry will actually open with, not a second guess made in the renderer.
+ */
+export const PREFERRED_SHELL_ORDER: readonly ShellId[] = ['pwsh', 'powershell', 'wt', 'cmd']
+
 export interface Group {
   id: string
   name: string
@@ -83,6 +92,11 @@ export interface OpenResult {
   ok: boolean
   error?: string
   shell?: ShellId
+  /**
+   * True when this request was swallowed because the very same launch was
+   * already under way. The first caller did the work, so the result is real.
+   */
+  deduped?: boolean
 }
 
 export interface AddEntryRequest {
@@ -134,6 +148,11 @@ export interface TermHopApi {
    * this never pollutes the entry list.
    */
   openPath(cwd: string): Promise<OpenResult>
+  /**
+   * Shows a directory in Explorer without saving it. Same behaviour as the
+   * 'reveal' target, for a path that has no entry to hang it on.
+   */
+  revealPath(cwd: string): Promise<OpenResult>
   /** Moves to the trash rather than deleting outright. Returns the new config. */
   trashEntry(id: string): Promise<Config>
   trashGroup(id: string): Promise<Config>
@@ -155,6 +174,13 @@ export interface TermHopApi {
   setCloseOnBlur(enabled: boolean): void
   hideLauncher(): void
   showLauncher(): void
+  /**
+   * Ends the temporary blur-hold the main process installs after a successful
+   * launch. The renderer calls it once the result is actually on screen: the
+   * window is being kept visible against the focus theft of the terminal that
+   * just opened, and only the renderer knows when that has served its purpose.
+   */
+  launcherSettled(): void
   /** Asks the main process to shrink the launcher to its content height. */
   resizeLauncher(contentHeight: number): void
   openSettings(): void

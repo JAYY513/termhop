@@ -18,6 +18,7 @@ const api: TermHopApi = {
   saveConfig: (config: Config) => ipcRenderer.invoke('config:save', config),
   addEntry: (request: AddEntryRequest) => ipcRenderer.invoke('entry:add', request),
   openPath: (cwd: string) => ipcRenderer.invoke('entry:openPath', cwd),
+  revealPath: (cwd: string) => ipcRenderer.invoke('entry:revealPath', cwd),
   openEntry: (entryId: string, target: OpenTarget): Promise<OpenResult> =>
     ipcRenderer.invoke('entry:open', entryId, target),
   trashEntry: (id: string) => ipcRenderer.invoke('entry:trash', id),
@@ -39,6 +40,7 @@ const api: TermHopApi = {
   setCloseOnBlur: (enabled: boolean) => ipcRenderer.send('window:closeOnBlur', enabled),
   hideLauncher: () => ipcRenderer.send('launcher:hide'),
   showLauncher: () => ipcRenderer.send('launcher:show'),
+  launcherSettled: () => ipcRenderer.send('launcher:settled'),
   resizeLauncher: (contentHeight: number) => ipcRenderer.send('launcher:resize', contentHeight),
   openSettings: () => ipcRenderer.send('nav:settings'),
   beginAddEntry: () => ipcRenderer.send('nav:beginAdd'),

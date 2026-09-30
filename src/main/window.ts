@@ -24,6 +24,15 @@ let ready = false
 let appIsQuitting = false
 let onPlacementChanged: ((placement: LauncherPlacement) => void) | null = null
 
+/*
+ * The terminal that just started steals the focus, which blurs the launcher and
+ * used to hide it in the same tick the launch succeeded. The confirmation the
+ * renderer wants to show could never survive that. So a successful launch parks
+ * a short hold here and the renderer releases it once the result is readable.
+ */
+let holdBlurUntil = 0
+let holdTimer: NodeJS.Timeout | null = null
+
 let placement: LauncherPlacement = { mode: 'cursor', point: null }
 // The last spot the code moved the window to, so the 'moved' event it causes
 // can be told apart from a drag.
@@ -89,6 +98,7 @@ export function createLauncher(
   launcher.setMaximumSize(LAUNCHER_WIDTH, LAUNCHER_HEIGHT)
 
   launcher.on('blur', () => {
+    if (Date.now() < holdBlurUntil) return
     if (closeOnBlur && !settingsFocused()) hideLauncher()
   })
 
@@ -244,6 +254,12 @@ function clampLauncherIntoView(): void {
 
 export function showLauncher(): void {
   if (!launcher || launcher.isDestroyed()) return
+  // A hold left over from a previous launch must not apply to this one.
+  holdBlurUntil = 0
+  if (holdTimer) {
+    clearTimeout(holdTimer)
+    holdTimer = null
+  }
   if (launcher.isMinimized()) launcher.restore()
   if (!ready) {
     launcher.once('ready-to-show', () => showLauncher())
@@ -302,6 +318,42 @@ export function getLauncherWindow(): BrowserWindow | null {
 
 export function setCloseOnBlur(value: boolean): void {
   closeOnBlur = value
+}
+
+/**
+ * Keeps the launcher on screen for `ms`, ignoring the blur that the newly
+ * opened terminal causes.
+ *
+ * The hold is a promise that the renderer will call releaseLauncherHold() once
+ * its confirmation is readable. It also expires on its own, because a renderer
+ * that never reports back (a reload mid-launch, say) would otherwise leave the
+ * window stuck on top with nothing to dismiss it.
+ */
+export function holdLauncherOnBlur(ms: number): void {
+  holdBlurUntil = Date.now() + ms
+  if (holdTimer) clearTimeout(holdTimer)
+  holdTimer = setTimeout(() => {
+    holdTimer = null
+    holdBlurUntil = 0
+    enforceCloseOnBlur()
+  }, ms + 60)
+}
+
+export function releaseLauncherHold(): void {
+  holdBlurUntil = 0
+  if (holdTimer) {
+    clearTimeout(holdTimer)
+    holdTimer = null
+  }
+  // The blur that was ignored has already happened and will not fire again, so
+  // the rule has to be applied by hand or the launcher would never close.
+  enforceCloseOnBlur()
+}
+
+function enforceCloseOnBlur(): void {
+  if (!closeOnBlur || !launcher || launcher.isDestroyed() || launcher.isFocused()) return
+  if (settingsFocused()) return
+  hideLauncher()
 }
 
 export function getPlacement(): LauncherPlacement {

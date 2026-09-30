@@ -1,4 +1,5 @@
-import type { ShellId, TermHopApi } from '@shared/types'
+import type { ShellAvailability, ShellId, TermHopApi } from '@shared/types'
+import { PREFERRED_SHELL_ORDER } from '@shared/types'
 
 declare global {
   interface Window {
@@ -7,6 +8,16 @@ declare global {
 }
 
 export const api: TermHopApi = window.termhop
+
+/**
+ * The same order the main process uses to pick a shell for a bare path. The
+ * launcher needs it only to label the "save this" row — a row promising one
+ * shell and producing another would be worse than no badge at all.
+ */
+export function preferredShellId(availability: ShellAvailability | null): ShellId | null {
+  if (!availability) return null
+  return PREFERRED_SHELL_ORDER.find((id) => availability[id]) ?? null
+}
 
 export const SHELL_META: Record<ShellId, { label: string; badge: string }> = {
   pwsh: { label: 'PowerShell 7', badge: 'pwsh' },

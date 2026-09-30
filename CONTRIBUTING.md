@@ -24,7 +24,7 @@ npm run icons
 | `npm run typecheck` | 主进程和渲染层两套 tsconfig 分别检查 |
 | `npm run build` | 产出到 `out/` |
 | `npm run dist` | 打包出 `release/` 下的 exe 和 zip |
-| `npm run verify` | 跑四套验证（见下） |
+| `npm run verify` | 跑五套验证（见下） |
 | `npm run icons` | 重新生成应用与托盘图标 |
 | `npm run docs:shot` | 重新生成 README 里的面板截图 |
 
@@ -68,13 +68,14 @@ scripts/
   verify-spawn.mjs    验证 shell 启动
   verify-window.mjs   验证窗口行为
   verify-cli.mjs      验证命令行
+  verify-quickadd.mjs 验证保存目录这条路的边界
   verify-autostart.mjs 验证开机自启
   screenshot-docs.cjs 生成 README 用的面板截图，用隔离 profile 和假数据
   testkit.mjs         套件共用的进程与注册表前提
   stubs/              给单元测试用的假 electron 模块
 ```
 
-## 四套验证为什么存在
+## 五套验证为什么存在
 
 这些脚本各自负责**代码里最容易出错、又最难靠肉眼检查**的部分。改了相关代码请一并跑。
 
@@ -121,6 +122,18 @@ CLI 走了单实例中继、headless 执行、`.cmd` 生成三条路：
 
 > 注意：这个脚本会操作 `%APPDATA%\TermHop\config.json`。它跑之前会快照、跑完还原，
 > 如果你改了这个脚本，记得保留这个行为。
+
+### verify-quickadd.mjs
+
+面板里那条「存为常用目录」背后有两件肉眼完全看不出来的事：
+
+- **不存在的目录不能被存进去**。存进去就是一条永远打不开的死条目，之后每次按回车
+  都报"目录不存在"，用户只能去设置里翻回收站才知道当初打错了什么
+- **新条目的默认 shell 必须和面板打开同一路径时用的是同一个**。这两处以前各写一份
+  （一处按 `pwsh → powershell → wt → cmd` 找，一处写死 `powershell`），症状是用户用
+  `pwsh` 打开了一个目录、存下来、再打开变成了 Windows PowerShell，且没有任何提示
+
+这两个断言都需要真的文件系统，所以脚本在临时目录里造出真目录、文件和不存在路径各一个。
 
 ### verify-autostart.mjs
 

@@ -25,6 +25,7 @@
     "verify:spawn": "node scripts/verify-spawn.mjs",
     "verify:window": "node scripts/verify-window.mjs",
     "verify:cli": "node scripts/verify-cli.mjs",
+    "verify:quickadd": "node scripts/verify-quickadd.mjs",
     "verify:autostart": "node scripts/verify-autostart.mjs",
     "dist": "npm run build && electron-builder --win",
     "dist:dir": "npm run build && electron-builder --win --dir"

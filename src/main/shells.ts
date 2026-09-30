@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ShellAvailability, ShellId } from '@shared/types'
+import { PREFERRED_SHELL_ORDER } from '@shared/types'
 
 const SystemRoot = process.env.SystemRoot || 'C:\\Windows'
 
@@ -169,6 +170,20 @@ export function checkShells(force = false): ShellAvailability {
     result[shell.id] = availabilityCache.get(shell.id) as boolean
   }
   return result
+}
+
+/**
+ * Which shell a bare path gets, and which shell a new entry defaults to.
+ *
+ * These used to be decided in two places: the launcher walked its own
+ * preference list when opening an unsaved path, while addEntryToConfig
+ * hardcoded 'powershell'. The visible result was that saving a directory the
+ * user had just opened with Enter quietly changed which shell it opened in.
+ * The order itself is shared with the renderer, which shows it on the row.
+ */
+export function preferredShell(availability?: ShellAvailability): ShellId | null {
+  const available = availability ?? checkShells()
+  return PREFERRED_SHELL_ORDER.find((id) => available[id]) ?? null
 }
 
 /* ----------------------------------------------------------------- launch */

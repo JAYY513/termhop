@@ -20,6 +20,7 @@ const SUITES = [
   ['verify-spawn.mjs', 'shell 启动'],
   ['verify-window.mjs', '窗口行为'],
   ['verify-cli.mjs', '命令行'],
+  ['verify-quickadd.mjs', '快速添加'],
   ['verify-autostart.mjs', '开机自启']
 ]
 

@@ -1,11 +1,12 @@
 import { app, dialog, ipcMain, Menu, Tray } from 'electron'
-import { existsSync, statSync } from 'node:fs'
-import type { AddEntryRequest, Config, OpenTarget, ShellId } from '@shared/types'
+import { existsSync } from 'node:fs'
+import type { AddEntryRequest, Config, OpenResult, OpenTarget, ShellId } from '@shared/types'
 import { addCliToPath, installCli, parseCli, runCli } from './cli'
 import {
   addEntryToConfig,
   clearTrash,
   consumeNotices,
+  isDirectory,
   loadConfig,
   normalizePath,
   purgeFromTrash,
@@ -15,7 +16,7 @@ import {
   trashGroupInConfig
 } from './config'
 import { registerHotkey, unregisterAll } from './hotkey'
-import { checkShells, getShell, launchShell, revealInExplorer } from './shells'
+import { checkShells, getShell, launchShell, preferredShell, revealInExplorer } from './shells'
 import {
   broadcast,
   closeSettings,
@@ -23,7 +24,9 @@ import {
   flushPendingPlacement,
   getPlacement,
   hideLauncher,
+  holdLauncherOnBlur,
   initPlacement,
+  releaseLauncherHold,
   resizeLauncherToContent,
   setAppIsQuitting,
   setCloseOnBlur,
@@ -36,6 +39,59 @@ import {
 
 let tray: Tray | null = null
 let pendingBeginAdd = false
+
+/**
+ * How long the same launch counts as an accident rather than an intention.
+ *
+ * A held Enter key fires keydown roughly every 30ms and a double click lands two
+ * mousedowns about 150ms apart. Both used to spawn a terminal per event, and
+ * leaving the user with a pile of near-identical windows is precisely the mess
+ * a launcher exists to prevent.
+ */
+const DUPLICATE_LAUNCH_WINDOW = 1000
+
+/** How long the launcher survives the focus theft of the window it just opened. */
+const LAUNCH_CONFIRM_HOLD = 1500
+
+const launchesInFlight = new Map<string, Promise<OpenResult>>()
+const launchesSettled = new Map<string, { at: number; result: OpenResult }>()
+
+/**
+ * Runs a launch at most once per key per window. Callers that arrive while it
+ * is running share its result instead of starting a second terminal, and the
+ * renderer uses `deduped` to tell "you already asked for this" from a fresh
+ * success.
+ */
+function launchOnce(key: string, run: () => Promise<OpenResult>): Promise<OpenResult> {
+  const running = launchesInFlight.get(key)
+  if (running) return running.then((result) => ({ ...result, deduped: true }))
+
+  const settled = launchesSettled.get(key)
+  if (settled && Date.now() - settled.at < DUPLICATE_LAUNCH_WINDOW) {
+    return Promise.resolve({ ...settled.result, deduped: true })
+  }
+
+  const promise = run().then(
+    (result) => {
+      launchesInFlight.delete(key)
+      // Only a launch that worked is worth remembering. A failure has to stay
+      // immediately retryable, or one bad path would lock the entry out.
+      if (result.ok) {
+        launchesSettled.set(key, { at: Date.now(), result })
+        for (const [other, past] of launchesSettled) {
+          if (Date.now() - past.at >= DUPLICATE_LAUNCH_WINDOW) launchesSettled.delete(other)
+        }
+      }
+      return result
+    },
+    (error: unknown) => {
+      launchesInFlight.delete(key)
+      throw error
+    }
+  )
+  launchesInFlight.set(key, promise)
+  return promise
+}
 
 /**
  * Windows has no first-class "launched at login" signal, so autostart passes
@@ -205,14 +261,6 @@ function recordUse(entryId: string, shell: ShellId, config: Config): Config {
   return saved
 }
 
-function isDirectory(candidate: string): boolean {
-  try {
-    return statSync(candidate).isDirectory()
-  } catch {
-    return false
-  }
-}
-
 function resolveShell(config: Config, entryId: string, target: OpenTarget): ShellId | 'reveal' | null {
   const entry = config.entries.find((item) => item.id === entryId)
   if (!entry) return null
@@ -335,26 +383,61 @@ function registerIpc(): void {
   })
 
   /**
-   * Opens a terminal somewhere that is not in the list. Nothing is written to
-   * the config: a one-off directory should not become a saved entry.
+   * Turns whatever the user typed into a directory that exists right now, or
+   * the sentence explaining why it cannot be used. Shared by the two handlers
+   * that act on an unsaved path, so "does this path work" is answered once.
    */
-  ipcMain.handle('entry:openPath', async (_event, raw: string) => {
+  function resolveDirectory(raw: string): { ok: true; cwd: string } | { ok: false; error: string } {
     const cwd = normalizePath(raw)
     if (!cwd) return { ok: false, error: '请输入一个目录' }
     if (!existsSync(cwd)) return { ok: false, error: `目录不存在：${cwd}` }
     if (!isDirectory(cwd)) return { ok: false, error: `不是一个目录：${cwd}` }
+    return { ok: true, cwd }
+  }
+
+  /**
+   * Opens a terminal somewhere that is not in the list. Nothing is written to
+   * the config: a one-off directory should not become a saved entry.
+   *
+   * The window is deliberately not hidden here. Hiding it in the same tick the
+   * launch succeeded is what made a click look like it had done nothing at all;
+   * the renderer holds the window open, shows the result, and closes it itself.
+   */
+  ipcMain.handle('entry:openPath', async (_event, raw: string) => {
+    const resolved = resolveDirectory(raw)
+    if (!resolved.ok) return { ok: false, error: resolved.error }
+    const cwd = resolved.cwd
 
     const available = checkShells()
-    const preferred = (['pwsh', 'powershell', 'wt', 'cmd'] as const).find(
-      (id) => available[id]
-    )
+    const preferred = preferredShell(available)
     if (!preferred) return { ok: false, error: '没有找到可用的 shell' }
 
     const spec = getShell(preferred)
     if (!spec) return { ok: false, error: `Unknown shell: ${preferred}` }
-    const outcome = await launchShell(spec, cwd, null)
-    if (outcome.ok) hideLauncher()
-    return { ...outcome, shell: preferred }
+
+    const result = await launchOnce(`path|${cwd.toLowerCase()}`, async () => {
+      const outcome = await launchShell(spec, cwd, null)
+      return { ...outcome, shell: preferred }
+    })
+    if (result.ok) holdLauncherOnBlur(LAUNCH_CONFIRM_HOLD)
+    return result
+  })
+
+  /**
+   * Shows an unsaved directory in Explorer. The 'reveal' target could not
+   * reach these two rows: it hangs off an entry id, and a path that is not
+   * saved has none. The footer advertised the shortcut on them anyway.
+   */
+  ipcMain.handle('entry:revealPath', async (_event, raw: string) => {
+    const resolved = resolveDirectory(raw)
+    if (!resolved.ok) return { ok: false, error: resolved.error }
+    // Explorer steals focus the same way a terminal does, so the launcher has
+    // to be held open for the confirmation to be readable.
+    const result = await launchOnce(`reveal|${resolved.cwd.toLowerCase()}`, () =>
+      revealInExplorer(resolved.cwd)
+    )
+    if (result.ok) holdLauncherOnBlur(LAUNCH_CONFIRM_HOLD)
+    return result
   })
 
   ipcMain.handle('entry:open', async (_event, entryId: string, target: OpenTarget) => {
@@ -369,25 +452,28 @@ function registerIpc(): void {
     const shellId = resolveShell(config, entryId, target)
     if (!shellId) return { ok: false, error: 'This entry no longer exists.' }
 
-    if (shellId === 'reveal') {
-      const outcome = await revealInExplorer(entry.path)
-      if (outcome.ok) hideLauncher()
-      return outcome
-    }
+    // The key carries the resolved shell rather than the requested target, so
+    // 'last' and 'default' still collapse into one launch when both arrive at
+    // once on the same entry.
+    const result = await launchOnce(`entry|${entryId}|${shellId}`, async () => {
+      if (shellId === 'reveal') return revealInExplorer(entry.path)
 
-    const spec = getShell(shellId)
-    if (!spec) return { ok: false, error: `Unknown shell: ${shellId}` }
+      const spec = getShell(shellId)
+      if (!spec) return { ok: false, error: `Unknown shell: ${shellId}` }
 
-    const outcome = await launchShell(spec, entry.path, entry.initCmd)
-    if (!outcome.ok) return outcome
+      const outcome = await launchShell(spec, entry.path, entry.initCmd)
+      if (!outcome.ok) return outcome
 
-    recordUse(entryId, shellId, config)
-    hideLauncher()
-    return { ok: true, shell: shellId }
+      recordUse(entryId, shellId, config)
+      return { ok: true, shell: shellId }
+    })
+    if (result.ok) holdLauncherOnBlur(LAUNCH_CONFIRM_HOLD)
+    return result
   })
 
   ipcMain.on('window:closeOnBlur', (_event, enabled: boolean) => setCloseOnBlur(!!enabled))
   ipcMain.on('launcher:hide', () => hideLauncher())
+  ipcMain.on('launcher:settled', () => releaseLauncherHold())
   ipcMain.on('launcher:show', () => showLauncher())
   ipcMain.on('launcher:resize', (_event, contentHeight: number) =>
     resizeLauncherToContent(Number(contentHeight))

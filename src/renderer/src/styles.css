@@ -18,6 +18,7 @@
   --muted: #8b90a0;
   --accent: #6fb3ff;
   --danger: #ff6b6b;
+  --ok: #6ee7a8;
   --radius: 14px;
 }
 
@@ -87,6 +88,7 @@ body {
 }
 
 .search-shell {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -112,10 +114,65 @@ body {
   font-size: 18px;
   font-family: inherit;
   user-select: text;
+  transition: opacity 110ms ease;
 }
 
 .search::placeholder {
   color: var(--muted);
+}
+
+/*
+ * While a launch is in flight the query is not going to be acted on, so it steps
+ * back. Fading rather than hiding keeps the search box looking like the same
+ * box it was a moment ago.
+ */
+.search-shell.busy .search {
+  opacity: 0.4;
+}
+
+/*
+ * Overlays the input instead of sitting next to it: the search field is the one
+ * element in this window that must not resize under the user. The right offset
+ * clears the drag grip, which owns the last 32px of the row.
+ */
+.search-status {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.search-status.done {
+  color: var(--ok);
+}
+
+.search-status .tick {
+  font-size: 13px;
+}
+
+.spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* The only drag handle, kept clear of the input so typing still works. */
@@ -162,6 +219,25 @@ body {
   color: var(--accent);
 }
 
+/* The save row sits directly under the path row and reads as its counterpart,
+   so it keeps the same monospace path and the same blue, but adds a leading
+   marker: the two rows differ only in what they do, and the title is the same
+   string on both. */
+.save-row .row-title {
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  color: var(--accent);
+}
+
+.save-row .row-path {
+  color: var(--ok);
+}
+
+.save-row .badge {
+  background: rgba(126, 214, 160, 0.16);
+  border-color: rgba(126, 214, 160, 0.35);
+  color: var(--ok);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -189,6 +265,16 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  /* Sticks to the top while its own group scrolls past, so a group with twenty
+     entries does not leave the rows under the cursor unattributed. Sticky is
+     scoped to the parent .section, so the next heading pushes this one out
+     instead of the two piling up.
+     The background is opaque and its 18px padding is wider than the 8px row
+     gutter — without both, rows show through the edges as they slide under. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg);
 }
 
 .row {
@@ -199,11 +285,57 @@ body {
   margin: 0 8px;
   padding: 8px 10px;
   border-radius: 9px;
+  /* The pointer is the cheapest feedback there is, and it was missing: the body
+     sets 'cursor: default', so clickable rows still wore an arrow. */
+  cursor: pointer;
+  /* Without a transition the highlight snaps, which reads as a glitch rather
+     than as the list answering the mouse. */
+  transition:
+    background-color 90ms ease,
+    box-shadow 90ms ease,
+    opacity 90ms ease;
 }
 
 .row.selected {
   background: rgba(111, 179, 255, 0.16);
   box-shadow: inset 0 0 0 1px rgba(111, 179, 255, 0.3);
+}
+
+/* The press is acknowledged on mousedown, which is also when the launch
+   starts, so this is the only chance to show the click landed. */
+.row.pressed {
+  background: rgba(111, 179, 255, 0.3);
+  box-shadow: inset 0 0 0 1px rgba(111, 179, 255, 0.55);
+}
+
+/* Placed after .row.selected so a row that is both selected and reporting a
+   launch shows the launch, not the selection. */
+.row.launching {
+  background: rgba(111, 179, 255, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(111, 179, 255, 0.55);
+  cursor: progress;
+}
+
+.row.done {
+  background: rgba(110, 231, 168, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(110, 231, 168, 0.38);
+}
+
+.row.failed {
+  background: rgba(255, 107, 107, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 107, 107, 0.42);
+}
+
+/* Everything that is not the row being launched steps back, so the eye lands on
+   the one row that is doing something. */
+.list.busy .row:not(.launching) {
+  opacity: 0.38;
+}
+
+/* The section headings dim with their rows. Leaving them at full strength made
+   the list look like it was only half-reacting. */
+.list.busy .section-title {
+  opacity: 0.5;
 }
 
 .row-index {
@@ -260,11 +392,31 @@ mark {
   color: var(--text);
 }
 
-.meta {
+/* The state indicator borrows the "last used" slot, so it inherits its width
+   and alignment: the row must not resize as the state changes. */
+.meta,
+.row-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
   font-size: 11px;
   color: var(--muted);
   min-width: 58px;
   text-align: right;
+  white-space: nowrap;
+}
+
+.row-state.launching {
+  color: var(--accent);
+}
+
+.row-state.done {
+  color: var(--ok);
+}
+
+.row-state.failed {
+  color: var(--danger);
 }
 
 .notice {
@@ -276,32 +428,19 @@ mark {
 }
 
 .notice.error {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   background: rgba(255, 107, 107, 0.14);
   border: 1px solid rgba(255, 107, 107, 0.35);
   color: #ffb4b4;
 }
 
-.notice.info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(111, 179, 255, 0.12);
-  border: 1px solid rgba(111, 179, 255, 0.28);
-  color: #bcd9ff;
-}
-
-button.link {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--accent);
-  text-decoration: underline;
-  font-size: 12px;
-}
-
-button.link:hover {
-  background: none;
-  color: #9ccbff;
+.notice.error .notice-hint {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 .no-result,
@@ -564,6 +703,22 @@ button.icon.danger:hover {
 @keyframes pulse {
   50% {
     opacity: 0.55;
+  }
+}
+
+/*
+ * The spinner is the one animation that carries meaning here, so it keeps
+ * turning; everything else is decoration and is dropped. A motionless ring next
+ * to the words 启动中… still says "busy".
+ */
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .search {
+    transition: none;
+  }
+
+  .hotkey.recording {
+    animation: none;
   }
 }
 

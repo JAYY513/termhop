@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import type {
   AddEntryRequest,
@@ -11,6 +11,7 @@ import type {
   ShellId,
   TrashItem
 } from '@shared/types'
+import { preferredShell } from './shells'
 
 export const CONFIG_VERSION = 1
 export const TRASH_LIMIT = 50
@@ -35,6 +36,15 @@ export function normalizePath(input: string): string {
 export function folderNameOf(fullPath: string): string {
   const parts = normalizePath(fullPath).split(/[\\/]/)
   return parts[parts.length - 1] || fullPath
+}
+
+/** True only for a path that exists right now and really is a directory. */
+export function isDirectory(candidate: string): boolean {
+  try {
+    return statSync(candidate).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 export function defaultConfig(): Config {
@@ -272,6 +282,12 @@ export function addEntryToConfig(config: Config, request: AddEntryRequest): Muta
   const path = normalizePath(request.path)
   if (!path) return { ok: false, error: '请填写目录路径', config }
 
+  // Checked here rather than in each caller. The CLI did this itself and the
+  // settings form did not, so a typo pasted into the form became an entry that
+  // could never open — every later press on it failed with "folder not found".
+  if (!existsSync(path)) return { ok: false, error: `目录不存在：${path}`, config }
+  if (!isDirectory(path)) return { ok: false, error: `不是一个目录：${path}`, config }
+
   const clash = config.entries.find(
     (entry) => normalizePath(entry.path).toLowerCase() === path.toLowerCase()
   )
@@ -289,7 +305,9 @@ export function addEntryToConfig(config: Config, request: AddEntryRequest): Muta
     path,
     title: (request.title ?? '').trim(),
     groupId,
-    defaultShell: request.defaultShell ?? 'powershell',
+    // Same order the launcher uses to open an unsaved path, so saving a
+    // directory the user just opened does not change its shell.
+    defaultShell: request.defaultShell ?? preferredShell() ?? 'powershell',
     lastShell: null,
     initCmd: request.initCmd?.trim() || null,
     order: config.entries.length

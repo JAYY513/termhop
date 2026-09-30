@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CliInstallResult, Config, Entry } from '@shared/types'
 import {
@@ -87,7 +87,8 @@ export async function runCli(command: CliCommand, workingDirectory: string): Pro
   if (command.kind === 'add') {
     const target = command.target ? normalizePath(command.target) : normalizePath(workingDirectory)
     if (!target) return EXIT_USAGE
-    if (!existsSync(target)) return EXIT_FAIL
+    // Existence is checked inside addEntryToConfig, so the CLI and the forms
+    // cannot drift on what counts as a valid directory.
     const result = addEntryToConfig(config, { path: target })
     if (!result.ok) return EXIT_FAIL
     saveConfig(result.config)
