@@ -540,7 +540,14 @@ export default function Launcher({ config, onConfig }: Props) {
       // Anything that could start a second launch, or move the list out from
       // under a launch already in flight, is swallowed. Escape deliberately
       // stays live: bailing out of a slow launch is always allowed.
-      const isLaunchKey = event.key === 'Enter' || /^[1-9]$/.test(event.key)
+      //
+      // Ctrl+N belongs to the launch group, not the navigation group: it is
+      // the add shortcut the footer advertises, and it opens a form or saves
+      // a path, both of which are things a launch in flight must not race.
+      const isLaunchKey =
+        event.key === 'Enter' ||
+        /^[1-9]$/.test(event.key) ||
+        (event.ctrlKey && event.key === 'n')
       const isNavKey =
         event.key === 'ArrowDown' ||
         event.key === 'ArrowUp' ||
@@ -548,7 +555,7 @@ export default function Launcher({ config, onConfig }: Props) {
         event.key === 'PageUp' ||
         (event.key === 'Home' && !query) ||
         (event.key === 'End' && !query) ||
-        (event.ctrlKey && (event.key === 'p' || event.key === 'n'))
+        (event.ctrlKey && event.key === 'p')
       // `busyRef` covers the gap before this handler's closure is rebuilt, and
       // `locked` is the same condition as the UI sees it. Either alone would do;
       // together there is no frame in which a repeat gets through.
@@ -556,12 +563,16 @@ export default function Launcher({ config, onConfig }: Props) {
         event.preventDefault()
         return
       }
-      if (event.key === 'ArrowDown' || (event.key === 'p' && event.ctrlKey)) {
+      if (event.key === 'ArrowDown') {
         event.preventDefault()
         setSelected((prev) => (flatRows.length ? (prev + 1) % flatRows.length : 0))
         return
       }
-      if (event.key === 'ArrowUp' || (event.key === 'n' && event.ctrlKey)) {
+      // Ctrl+P is "previous", so it moves up — the way P reads everywhere
+      // else. It used to move down, paired with a Ctrl+N that moved up, and
+      // that pair is why Ctrl+N could not also be the add shortcut: the first
+      // branch to claim a key wins, and the navigation branch was first.
+      if (event.key === 'ArrowUp' || (event.key === 'p' && event.ctrlKey)) {
         event.preventDefault()
         setSelected((prev) => (flatRows.length ? (prev - 1 + flatRows.length) % flatRows.length : 0))
         return
@@ -602,6 +613,12 @@ export default function Launcher({ config, onConfig }: Props) {
         // "New" means new, not "go open a different window and fill in a form".
         // With a path already typed there is something to save right here; with
         // an empty box there is nothing, and the full form is still the answer.
+        //
+        // This branch was unreachable from the very first commit: the
+        // navigation branch above it also matched Ctrl+N and returned first,
+        // so the footer advertised an "add" shortcut that moved the selection
+        // instead. Keep this branch below the navigation one only if the
+        // navigation one no longer claims Ctrl+N.
         if (canSave) void savePath(flatRows[saveRowIndex].path)
         else api.openSettings()
         return

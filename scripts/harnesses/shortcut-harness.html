@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>TermHop shortcut harness</title>
+    <style>
+      body {
+        margin: 0;
+        background: #17181c;
+        color: #e8e9ec;
+        font: 13px/1.5 'Segoe UI', system-ui, sans-serif;
+      }
+      .row {
+        padding: 4px 10px;
+      }
+      .row.selected {
+        background: #2b2d34;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      /*
+       * The fake IPC surface.
+       *
+       * It has to exist before the bundle runs: src/renderer/src/api.ts reads
+       * window.termhop at module scope, so a harness that installs it later
+       * would hand the component `undefined` and every call would throw.
+       *
+       * Nothing here launches anything. Every action the launcher can take is
+       * recorded instead, which is the whole point — the test asserts on what
+       * the component *tried* to do, without spawning a terminal on the
+       * developer's machine.
+       */
+      window.__calls = []
+      window.__handlers = {}
+
+      const rec = (name) => (...args) => {
+        window.__calls.push({ name, args })
+      }
+
+      window.__config = {
+        version: 1,
+        hotkey: 'CommandOrControl+Space',
+        groups: [{ id: 'g-work', name: '工作', order: 0 }],
+        entries: [
+          {
+            id: 'e-agency',
+            title: 'Agency API',
+            path: 'C:\\dev\\agency-api',
+            groupId: 'g-work',
+            defaultShell: 'pwsh',
+            lastShell: null,
+            initCmd: null,
+            order: 0
+          },
+          {
+            id: 'e-console',
+            title: 'Console Web',
+            path: 'C:\\dev\\console-web',
+            groupId: 'g-work',
+            defaultShell: 'powershell',
+            lastShell: 'cmd',
+            initCmd: null,
+            order: 1
+          },
+          {
+            id: 'e-shellx',
+            title: 'shellx',
+            path: 'C:\\dev\\shellx',
+            groupId: null,
+            defaultShell: 'cmd',
+            lastShell: null,
+            initCmd: null,
+            order: 2
+          }
+        ],
+        history: [],
+        trash: [],
+        placement: { mode: 'cursor', point: null },
+        settings: {
+          restoreLastShell: true,
+          closeOnBlur: true,
+          launchOnStartup: false,
+          maxHistory: 50,
+          recentCount: 2
+        }
+      }
+
+      window.termhop = {
+        platform: 'win32',
+        getVersion: async () => '0.0.0-harness',
+        getConfig: async () => window.__config,
+        saveConfig: async (config) => config,
+        addEntry: async (request) => {
+          rec('addEntry')(request)
+          return {
+            ok: true,
+            entryId: 'e-new',
+            config: {
+              ...window.__config,
+              entries: [
+                ...window.__config.entries,
+                {
+                  id: 'e-new',
+                  title: '',
+                  path: request.path,
+                  groupId: null,
+                  defaultShell: request.defaultShell ?? 'pwsh',
+                  lastShell: null,
+                  initCmd: null,
+                  order: 99
+                }
+              ]
+            }
+          }
+        },
+        openEntry: async (entryId, target) => {
+          rec('openEntry')(entryId, target)
+          return { ok: true, shell: 'pwsh' }
+        },
+        openPath: async (cwd) => {
+          rec('openPath')(cwd)
+          return { ok: true, shell: 'pwsh' }
+        },
+        revealPath: async (cwd) => {
+          rec('revealPath')(cwd)
+          return { ok: true }
+        },
+        trashEntry: async () => window.__config,
+        trashGroup: async () => window.__config,
+        trashRestore: async () => window.__config,
+        trashPurge: async () => window.__config,
+        trashClear: async () => window.__config,
+        // Three of the four installed, so the shell picker has something to
+        // choose between. One shell would make Shift+Enter a no-op and the
+        // test would pass for the wrong reason.
+        checkShells: async () => ({ pwsh: true, powershell: true, wt: true, cmd: true }),
+        setHotkey: async () => ({ ok: true }),
+        pickDirectory: async () => null,
+        openConfigDir: async () => '',
+        installCli: async () => ({ ok: true, shimPath: '', onPath: false }),
+        addCliToPath: async () => ({ ok: true, onPath: false }),
+        getPlacement: async () => ({ mode: 'cursor', point: null }),
+        setPlacementMode: async (mode) => ({ mode, point: null }),
+        getNotices: async () => [],
+        setAutoLaunch: async () => false,
+        getAutoLaunchState: async () => ({ enabled: false, supported: true }),
+        setCloseOnBlur: rec('setCloseOnBlur'),
+        hideLauncher: rec('hideLauncher'),
+        showLauncher: rec('showLauncher'),
+        launcherSettled: rec('launcherSettled'),
+        resizeLauncher: rec('resizeLauncher'),
+        openSettings: rec('openSettings'),
+        beginAddEntry: rec('beginAddEntry'),
+        consumeBeginAdd: async () => false,
+        closeSettings: rec('closeSettings'),
+        quit: rec('quit'),
+        on: (channel, handler) => {
+          if (!window.__handlers[channel]) window.__handlers[channel] = []
+          window.__handlers[channel].push(handler)
+          return () => {
+            const list = window.__handlers[channel] ?? []
+            const index = list.indexOf(handler)
+            if (index >= 0) list.splice(index, 1)
+          }
+        }
+      }
+
+      window.__emit = (channel, payload) => {
+        for (const handler of [...(window.__handlers[channel] ?? [])]) handler(payload)
+      }
+    </script>
+    <script src="./shortcut-harness.js"></script>
+  </body>
+</html>

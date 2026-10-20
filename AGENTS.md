@@ -25,21 +25,27 @@
 
 ## 验证
 
-`npm run verify` 跑五套。改了哪块就跑对应的：
+`npm run verify` 跑六套。改了哪块就跑对应的：
 
 | 套件 | 覆盖 |
 | --- | --- |
 | `verify:spawn` | shell 启动、base64 传参、`cmd /c start` 的引号 |
 | `verify:window` | 窗口层级、生命周期、高度自适应 |
+| `verify:shortcuts` | 启动面板的快捷键：footer 宣传的四个键各自真的做了那件事 |
 | `verify:cli` | argv 解析、条目匹配、shim 生成 |
 | `verify:quickadd` | 目录存在性校验、新条目默认 shell |
 | `verify:autostart` | 注册表里的开机自启项 |
 
 `verify:cli` 有一段要驱动**真实打包出来的 exe**，`npm run dist` 之前会跳过。
 `verify:autostart` 会读写 `HKCU\...\Run` 并注册登录项，跑前请让用户知情。
+`verify:shortcuts` 是唯一跑在 **Electron** 里的套件（其余是 `node scripts/*.mjs`）：
+快捷键这一层住在渲染层，得有真的 DOM 和真的键盘事件才测得出来。
+它用 `scripts/harnesses/` 里的挂载台驱动**真实的 Launcher 组件**，只把 IPC 换成记录器，
+所以跑它不会真的拉起终端。
 
 改 `src/main/config.ts` 或 `src/main/shells.ts` 里的共享逻辑时，
 `verify:quickadd` 是唯一覆盖"默认值必须和面板一致"那条的套件，别跳过。
+改了 `Launcher.tsx` 里的按键分发时，`verify:shortcuts` 是唯一覆盖那条的套件，也别跳过。
 
 ## 代码里几条不能随手破坏的不变量
 
@@ -52,6 +58,10 @@
   它们没有 `entryId`，`launchRow` 靠这一点决定分发路径。
 - **所有启动都走 `launchRow`**，它同时管 in-flight 锁和 `Phase` 状态上报。
   复制一段启动逻辑出去，就复制了一份"进行中/成功/失败长得一样"的问题。
+- **一个键只能有一个意思，而且先命中先赢。** keydown 处理器是一串 `if`，
+  前面某个分支 `return` 了，后面的同名判断就是死代码——`Ctrl+N` 的「添加」分支
+  被导航分支盖了整整一个版本，footer 写的和实际做的对不上。
+  加新快捷键时先确认没有更靠前的分支认领同一个组合键。
 
 ## 改完要同步的文档
 

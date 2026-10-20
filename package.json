@@ -1,6 +1,6 @@
 {
   "name": "termhop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A keyboard-first launcher for hopping into terminals in the right directory.",
   "main": "./out/main/index.js",
   "author": "TermHop contributors",
@@ -24,6 +24,7 @@
     "verify": "node scripts/verify-all.mjs",
     "verify:spawn": "node scripts/verify-spawn.mjs",
     "verify:window": "node scripts/verify-window.mjs",
+    "verify:shortcuts": "electron scripts/verify-shortcuts.cjs",
     "verify:cli": "node scripts/verify-cli.mjs",
     "verify:quickadd": "node scripts/verify-quickadd.mjs",
     "verify:autostart": "node scripts/verify-autostart.mjs",

@@ -11,22 +11,30 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { forceCleanRegistry, readLoginItem, waitForNoProcs } from './testkit.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const require = createRequire(import.meta.url)
+
+// The shortcut suite drives the real renderer, so it needs a real browser
+// kernel. Under plain node, `require('electron')` is the path to the binary.
+const ELECTRON = require('electron')
+
 const SUITES = [
-  ['verify-spawn.mjs', 'shell 启动'],
-  ['verify-window.mjs', '窗口行为'],
-  ['verify-cli.mjs', '命令行'],
-  ['verify-quickadd.mjs', '快速添加'],
-  ['verify-autostart.mjs', '开机自启']
+  ['verify-spawn.mjs', 'shell 启动', 'node'],
+  ['verify-window.mjs', '窗口行为', 'node'],
+  ['verify-shortcuts.cjs', '快捷键', 'electron'],
+  ['verify-cli.mjs', '命令行', 'node'],
+  ['verify-quickadd.mjs', '快速添加', 'node'],
+  ['verify-autostart.mjs', '开机自启', 'node']
 ]
 
-function runSuite(file) {
+function runSuite(file, runner) {
   return new Promise((done) => {
-    const child = spawn(process.execPath, [join(ROOT, 'scripts', file)], {
+    const child = spawn(runner === 'electron' ? ELECTRON : process.execPath, [join(ROOT, 'scripts', file)], {
       stdio: 'inherit',
       cwd: ROOT
     })
@@ -35,7 +43,7 @@ function runSuite(file) {
 }
 
 let failed = 0
-for (const [file, label] of SUITES) {
+for (const [file, label, runner] of SUITES) {
   if (!existsSync(join(ROOT, 'scripts', file))) {
     console.log(`\n### ${label} — 缺少 ${file}，跳过`)
     continue
@@ -49,7 +57,7 @@ for (const [file, label] of SUITES) {
   }
 
   console.log(`\n${'='.repeat(60)}\n### ${label} (${file})\n${'='.repeat(60)}`)
-  const code = await runSuite(file)
+  const code = await runSuite(file, runner)
   if (code !== 0) failed++
 }
 

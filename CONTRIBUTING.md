@@ -24,7 +24,7 @@ npm run icons
 | `npm run typecheck` | 主进程和渲染层两套 tsconfig 分别检查 |
 | `npm run build` | 产出到 `out/` |
 | `npm run dist` | 打包出 `release/` 下的 exe 和 zip |
-| `npm run verify` | 跑五套验证（见下） |
+| `npm run verify` | 跑六套验证（见下） |
 | `npm run icons` | 重新生成应用与托盘图标 |
 | `npm run docs:shot` | 重新生成 README 里的面板截图 |
 
@@ -67,15 +67,17 @@ scripts/
   verify-all.mjs      聚合执行器，负责套件之间的前提清理
   verify-spawn.mjs    验证 shell 启动
   verify-window.mjs   验证窗口行为
+  verify-shortcuts.cjs 验证启动面板的快捷键（跑在 Electron 里）
   verify-cli.mjs      验证命令行
   verify-quickadd.mjs 验证保存目录这条路的边界
   verify-autostart.mjs 验证开机自启
+  harnesses/          verify-shortcuts 用的挂载台和假 IPC
   screenshot-docs.cjs 生成 README 用的面板截图，用隔离 profile 和假数据
   testkit.mjs         套件共用的进程与注册表前提
   stubs/              给单元测试用的假 electron 模块
 ```
 
-## 五套验证为什么存在
+## 六套验证为什么存在
 
 这些脚本各自负责**代码里最容易出错、又最难靠肉眼检查**的部分。改了相关代码请一并跑。
 
@@ -107,6 +109,26 @@ shell 启动的引号问题在开发时几乎看不出来——路径错了窗�
 - **宽度用 `setMinimumSize` / `setMaximumSize` 钉死**，不让 `resizable: true`
   顺带引入意外拉伸
 - **cursor 和 center 两种模式都不带点**，只有 fixed 保留拖动出来的坐标
+
+### verify-shortcuts.cjs
+
+快捷键这一层住在渲染层，之前**一个自动化测试都没有**——`verify-window` 只测主进程。
+但这一层的 bug 全是"footer 宣传的和实际做的对不上"这类：`Ctrl+N` 的「添加」分支
+从第一个 commit 起就被前面的导航分支盖住了，成了死代码，footer 写着「Ctrl+N 添加」
+而实际按下去是选中行往上挪一格。
+
+所以这个套件是**唯一跑在 Electron 里的**（其余是 `node scripts/*.mjs`）：它用真实的
+键盘事件驱动**真实的 Launcher 组件**——`scripts/harnesses/` 里的挂载台把组件原样挂上，
+只把 IPC 换成记录器，所以跑它不会真的拉起终端。
+
+它断言的是：
+
+- footer 宣传的四个键各自真的做了那件事：`Enter` 打开、`Shift+Enter` 进选择器、
+  `Alt+Enter` 在资源管理器里打开、`Ctrl+N` 添加
+- `Ctrl+N` 在输入框为空时打开设置表单、输入了路径时直接存下来，且**不移动选中行**
+- footer 的文案和 README 的快捷键表不打架（同一个键不能在表里出现两次）
+
+改了 `src/renderer/src/components/Launcher.tsx` 里的按键分发，这个套件不能跳过。
 
 ### verify-cli.mjs
 
